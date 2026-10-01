@@ -43,7 +43,7 @@ try {
 			'指定 Stage 8 版本可执行 sh /tmp/deploy-stage9.sh，再执行 sh /tmp/enable-stage9.sh。',
 			'部署脚本会核对旧版本与配置。已正常运行 Stage 9 的设备无需重装。',
 			'核心 SHA256：' + coreHash,
-			'源码与许可：https://github.com/Lomiry/server；见 COPYING、COPYING.LESSER。',
+			'源码与许可：https://github.com/Lomiry/unlockmusic163；见 COPYING、COPYING.LESSER。',
 			'',
 		].join('\n')
 	);

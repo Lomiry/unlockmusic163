@@ -4,7 +4,7 @@
 
 ## 下载与部署
 
-前往 [GitHub Releases](https://github.com/Lomiry/server/releases) 下载路由器更新包，解压后先阅读包内 README 和部署说明。路由器需已有 Node.js、UnblockNeteaseMusic 服务配置和 HTTPS 证书。
+前往 [GitHub Releases](https://github.com/Lomiry/unlockmusic163/releases) 下载路由器更新包，解压后先阅读包内 README 和部署说明。路由器需已有 Node.js、UnblockNeteaseMusic 服务配置和 HTTPS 证书。
 
 [Stage 9 部署说明](docs/android-9.6.05-stage9.md) 包含版本校验、备份、启用、关闭和回滚步骤。自动部署脚本仅适用于说明中指定的 Stage 8 核心；已正常运行 Stage 9 的设备无需重新安装。
 
@@ -29,8 +29,8 @@
 在有足够内存的 Linux 开发环境中构建，再把核心部署到路由器：
 
 ```sh
-git clone --branch debug/android-9.6.05-stage9 https://github.com/Lomiry/server.git
-cd server
+git clone --branch debug/android-9.6.05-stage9 https://github.com/Lomiry/unlockmusic163.git
+cd unlockmusic163
 node .yarn/releases/yarn-3.8.7.cjs install --immutable
 node .yarn/releases/yarn-3.8.7.cjs build
 node .yarn/releases/yarn-3.8.7.cjs package:router

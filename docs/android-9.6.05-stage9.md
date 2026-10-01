@@ -6,7 +6,7 @@ app.js SHA256：`d8b0171e346f6655985669896197d5a65bc66afb7b783cc28af4b4c5370fdac
 
 ## 实现范围与源码
 
-仓库：`Lomiry/server`；分支：`debug/android-9.6.05-stage9`。本分支包含 Stage 9 及其依赖的 XEAPI 解码、Stage 6 权限补丁、observer、测试与回归脚本。
+仓库：`Lomiry/unlockmusic163`；分支：`debug/android-9.6.05-stage9`。本分支包含 Stage 9 及其依赖的 XEAPI 解码、Stage 6 权限补丁、observer、测试与回归脚本。
 
 - `src/xeapi-player-url-patch.js`：独立、默认关闭。开关 `UNM_XEAPI_PLAYER_URL_PATCH=true`。日志文件变量 `UNM_XEAPI_PLAYER_URL_PATCH_LOG_FILE`，默认 `/var/run/unblockneteasemusic/xeapi-player-url-patch.log`。
 - `src/hook.js`：XEAPI 响应先选择 Stage 6 privilege 补丁或 Stage 9 player 补丁，等待完成后调用 observer。接口互斥，不会对同一响应重复补丁。
