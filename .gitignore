@@ -60,7 +60,7 @@ typings/
 # next.js build output
 .next
 
-# pkg dist directory
+# Local build outputs
 dist/
 
 # es6 transformation
@@ -71,9 +71,6 @@ src/browser/cache.js
 ca.key
 ca.srl
 server.csr
-
-# Windows daemon
-daemon/
 
 # parcel's cache
 .parcel-cache/

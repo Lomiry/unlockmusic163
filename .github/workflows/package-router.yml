@@ -1,0 +1,46 @@
+name: Package router update
+
+on:
+    push:
+        branches:
+            - enhanced
+            - debug/android-9.6.05-stage9
+        paths:
+            - 'precompiled/app.js*'
+            - 'scripts/*.sh'
+            - 'scripts/package-router.cjs'
+            - 'docs/**'
+            - 'COPYING*'
+            - '.github/workflows/package-router.yml'
+    release:
+        types: [published]
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+jobs:
+    package-router:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - uses: actions/checkout@v7
+            - uses: actions/setup-node@v7
+              with:
+                  node-version: 20
+            - name: Package committed router core
+              run: node scripts/package-router.cjs
+            - name: Upload router artifact
+              uses: actions/upload-artifact@v7
+              with:
+                  name: unm-stage9-router
+                  path: |
+                      dist/unm-stage9-router.tar.gz
+                      dist/SHA256SUMS
+            - name: Publish router assets
+              if: github.event_name == 'release'
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  RELEASE_TAG: ${{ github.event.release.tag_name }}
+              run: gh release upload "$RELEASE_TAG" dist/unm-stage9-router.tar.gz dist/SHA256SUMS --clobber

@@ -1,8 +1,7 @@
 {
 	"name": "@unblockneteasemusic/server",
 	"version": "0.28.0",
-	"description": "Revive unavailable songs for Netease Cloud Music",
-	"main": "src/provider/match.js",
+	"description": "UnblockNeteaseMusic router core for OpenWrt and ImmortalWrt",
 	"bin": {
 		"unblockneteasemusic": "./precompiled/app.js"
 	},
@@ -10,33 +9,19 @@
 		"node": ">= 12"
 	},
 	"scripts": {
-		"start:dev": "cross-env LOG_LEVEL=debug node src/app.js -e https://music.163.com",
-		"start": "cross-env node src/app.js -e https://music.163.com",
+		"start:dev": "LOG_LEVEL=debug node src/app.js -e https://music.163.com",
+		"start": "node precompiled/app.js -e https://music.163.com",
 		"build": "webpack",
-		"pkg": "pkg . --out-path=dist/",
-		"test": "jest"
-	},
-	"pkg": {
-		"assets": [
-			"server.key",
-			"server.crt"
-		],
-		"targets": [
-			"node18-linux-arm64",
-			"node18-win-arm64",
-			"node18-linux-x64",
-			"node18-win-x64"
-		],
-		"outputPath": "dist"
+		"test": "jest",
+		"package:router": "node scripts/package-router.cjs"
 	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/UnblockNeteaseMusic/server.git"
+		"url": "https://github.com/Lomiry/server.git"
 	},
 	"author": "nondanee, 1715173329, pan93412",
 	"license": "LGPL-3.0-only",
 	"dependencies": {
-		"node-windows": "^1.0.0-beta.8",
 		"pino": "6.14.0",
 		"pino-pretty": "^7.6.1"
 	},
@@ -47,9 +32,7 @@
 		"@yarnpkg/sdks": "^3.3.0",
 		"browserslist": "^4.28.7",
 		"core-js": "^3.49.0",
-		"cross-env": "^10.1.0",
 		"jest": "^30.4.2",
-		"pkg": "^5.8.1",
 		"prettier": "^3.9.6",
 		"swc-loader": "^0.2.7",
 		"terser-webpack-plugin": "^5.6.1",
@@ -63,8 +46,6 @@
 		"minimist": "^1.2.8",
 		"semver": "^7.5.4"
 	},
-	"publishConfig": {
-		"access": "public"
-	},
-	"packageManager": "yarn@3.8.7"
+	"packageManager": "yarn@3.8.7",
+	"private": true
 }
