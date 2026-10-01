@@ -6,6 +6,10 @@ const querystring = require('querystring');
 const { isHost, cookieToMap, mapToCookie } = require('./utilities');
 const { getManagedCacheStorage } = require('./cache');
 const { logScope } = require('./logger');
+const { observeResponse: observeXeapiResponse } = require('./xeapi');
+const { scheduleBatchObservation } = require('./batch-observer');
+const { preparePrivilegePatch } = require('./xeapi-privilege-patch');
+const { preparePlayerUrlPatch } = require('./xeapi-player-url-patch');
 
 const logger = logScope('hook');
 const cs = getManagedCacheStorage('hook');
@@ -116,6 +120,18 @@ const domainList = [
 	'interface3.music.163.com',
 ];
 
+// Never include query parameters/fragments (which can contain credentials).
+const diagnosticPath = (path) =>
+	typeof path === 'string' ? path.split(/[?#]/, 1)[0] : null;
+
+// Only protocol flags are useful here; suppress unexpected header contents.
+const diagnosticFlag = (value) => {
+	if (value === undefined) return null;
+	return typeof value === 'string' && /^(true|false|\d{1,3})$/i.test(value)
+		? value
+		: '[redacted]';
+};
+
 hook.request.before = (ctx) => {
 	const { req } = ctx;
 	req.url =
@@ -129,12 +145,40 @@ hook.request.before = (ctx) => {
 					? req.headers.host
 					: null)) + req.url;
 	const url = parse(req.url);
+	const diagnosticHost = [url.hostname, req.headers.host].find((host) =>
+		hook.target.host.has(host)
+	);
+	if (diagnosticHost) {
+		// Capture flags before the existing x-aeapi rewrite. No request/body dump.
+		const contentType = req.headers['content-type'];
+		logger.info(
+			{
+				host: diagnosticHost,
+				method: req.method,
+				rawPath: diagnosticPath(url.path),
+				xAeapi: diagnosticFlag(req.headers['x-aeapi']),
+				encState: diagnosticFlag(req.headers['x-client-enc-state']),
+				contentType:
+					typeof contentType === 'string'
+						? contentType.split(';', 1)[0].trim()
+						: null,
+			},
+			'NCM raw request'
+		);
+	}
 	if (
 		[url.hostname, req.headers.host].some((host) =>
 			isHost(host, 'music.163.com')
 		)
 	)
 		ctx.decision = 'proxy';
+
+	if (diagnosticHost && url.pathname.startsWith('/xeapi/')) {
+		// Keep XEAPI separate: its request params are still encrypted, so the
+		// existing EAPI response patching/tryMatch() must never receive it.
+		ctx.xeapi = { apiPath: url.pathname.replace(/^\/xeapi\//, '/api/') };
+		return;
+	}
 
 	if (process.env.NETEASE_COOKIE && url.path.includes('url')) {
 		var cookies = cookieToMap(req.headers.cookie);
@@ -244,6 +288,23 @@ hook.request.before = (ctx) => {
 					}
 					netease.path = netease.path.replace(/\/\d*$/, '');
 					ctx.netease = netease;
+					if (netease.path === '/api/batch') {
+						try {
+							scheduleBatchObservation(netease.param);
+						} catch {
+							// Diagnostic failure must never reach the request catch.
+						}
+					}
+					if (netease.crypto === 'eapi') {
+						logger.info(
+							{
+								crypto: netease.crypto,
+								apiPath: diagnosticPath(netease.path),
+								e_r: netease.e_r,
+							},
+							'NCM decoded request'
+						);
+					}
 					// console.log(netease.path, netease.param)
 
 					if (netease.path === '/api/song/enhance/download/url')
@@ -271,14 +332,18 @@ hook.request.before = (ctx) => {
 					}
 				}
 			})
-			.catch(
-				(error) =>
-					error &&
+			.catch((error) => {
+				if (error) {
+					// Error messages can quote decrypted JSON; do not dump them or req.url.
 					logger.error(
-						error,
-						`A error occurred in hook.request.before when hooking ${req.url}.`
-					)
-			);
+						{
+							host: diagnosticHost,
+							rawPath: diagnosticPath(url.path),
+						},
+						'NCM request decoding failed'
+					);
+				}
+			});
 	} else if (
 		hook.target.host.has(url.hostname) &&
 		(url.path.startsWith('/weapi/') || url.path.startsWith('/api/'))
@@ -314,6 +379,15 @@ hook.request.before = (ctx) => {
 
 hook.request.after = (ctx) => {
 	const { req, proxyRes, netease, package: pkg } = ctx;
+	if (ctx.xeapi) {
+		const prepared = preparePrivilegePatch(ctx) || preparePlayerUrlPatch(ctx);
+		if (prepared)
+			return prepared.then(() =>
+				observeXeapiResponse(ctx.proxyRes, ctx.xeapi.apiPath, logger)
+			);
+		observeXeapiResponse(proxyRes, ctx.xeapi.apiPath, logger);
+		return;
+	}
 	if (
 		req.headers.host === 'tyst.migu.cn' &&
 		proxyRes.headers['content-range'] &&

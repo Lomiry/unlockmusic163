@@ -1,0 +1,4 @@
+# Preserve the verified release bytes regardless of checkout configuration.
+precompiled/app.js -text
+# Router deployment scripts require LF line endings.
+scripts/*.sh text eol=lf
