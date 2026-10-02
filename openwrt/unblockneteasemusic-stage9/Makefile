@@ -28,7 +28,7 @@ define Package/unblockneteasemusic-stage9/conffiles
 endef
 
 define Build/Prepare
-	$(MKDIR) $(PKG_BUILD_DIR)
+	$(INSTALL_DIR) $(PKG_BUILD_DIR)
 	$(CP) ./payload $(PKG_BUILD_DIR)/
 endef
 
