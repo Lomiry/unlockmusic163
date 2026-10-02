@@ -1,0 +1,91 @@
+#!/bin/sh
+set -eu
+umask 077
+payload=/usr/share/unblockneteasemusic-stage9
+core=/usr/share/unblockneteasemusic/core/app.js
+init=/etc/init.d/unblockneteasemusic
+backup=/etc/unblockneteasemusic-stage9
+
+fail() { echo "$*" >&2; exit 1; }
+hash() { sha256sum "$1" | awk '{print $1}'; }
+verify_backup() {
+    test -s "$backup/core.original" && test -s "$backup/init.original" || fail 'Backup incomplete; inspect it before proceeding.'
+    (cd "$backup" && sha256sum -c original.sha256) || fail 'Original backup checksum failed.'
+}
+case "${1:-status}" in
+status)
+    echo 'Packaged core:'
+    hash "$payload/app.js"
+    if test -f "$core"; then echo 'Active core:'; hash "$core"; fi
+    test ! -d "$backup" || echo "Backup: $backup"
+    ;;
+activate)
+    test "$(id -u)" -eq 0 || fail 'Run as root.'
+    test -f "$init" && test -s "$core" || fail 'Install/configure luci-app-unblockneteasemusic first.'
+    command -v node >/dev/null || fail 'Node.js is required.'
+    (cd "$payload" && sha256sum -c SHA256SUMS) || fail 'Payload checksum failed.'
+    node --check < "$payload/app.js"
+    test "$(grep -c 'procd_append_param env LOG_LEVEL=' "$init")" -eq 1 || fail 'Unsupported service layout: expected one LOG_LEVEL anchor.'
+    test "$(uci -q get unblockneteasemusic.config.auto_update || true)" != 1 || fail 'Disable automatic core updates in LuCI before activation.'
+    if test -d "$backup"; then
+        verify_backup
+        if test -f "$backup/active.sha256"; then
+            (cd / && sha256sum -c "$backup/active.sha256") || fail 'Active files changed since activation. Preserve those changes before reactivating.'
+        fi
+    else
+        mkdir "$backup"
+        cp -p "$core" "$backup/core.original"
+        cp -p "$init" "$backup/init.original"
+        (cd "$backup" && sha256sum core.original init.original > original.sha256)
+        chmod 600 "$backup"/*
+    fi
+    test ! -e "$backup/core.next" && test ! -e "$backup/init.next" || fail 'Staged files already exist; inspect the previous interrupted activation.'
+    cp "$payload/app.js" "$backup/core.next"
+    chmod 644 "$backup/core.next"
+    awk '
+      /# UNM_STAGE9_APK/ {next}
+      {
+        gsub(/UNM_XEAPI_PRIVILEGE_PATCH=(true|false)/,"UNM_XEAPI_PRIVILEGE_PATCH=true")
+        gsub(/UNM_XEAPI_PLAYER_URL_PATCH=(true|false)/,"UNM_XEAPI_PLAYER_URL_PATCH=true")
+        gsub(/UNM_ALBUM_PLAY_OBSERVER=(true|false)/,"UNM_ALBUM_PLAY_OBSERVER=false")
+        gsub(/UNM_XEAPI_OBSERVER=(true|false)/,"UNM_XEAPI_OBSERVER=false")
+        print
+        if ($0 ~ /procd_append_param env LOG_LEVEL=/)
+          print "procd_append_param env UNM_XEAPI_PRIVILEGE_PATCH=true UNM_XEAPI_PLAYER_URL_PATCH=true UNM_ALBUM_PLAY_OBSERVER=false UNM_XEAPI_OBSERVER=false UNM_XEAPI_PLAYER_URL_PATCH_LOG_FILE=/var/run/unblockneteasemusic/xeapi-player-url-patch.log # UNM_STAGE9_APK"
+      }
+    ' "$init" > "$backup/init.next"
+    chmod 755 "$backup/init.next"
+    sh -n "$backup/init.next"
+    verify_backup
+    test ! -e "$core.stage9-next" && test ! -e "$init.stage9-next" || fail 'An interrupted activation exists; inspect staged files first.'
+    cp -p "$backup/core.next" "$core.stage9-next"
+    cp -p "$backup/init.next" "$init.stage9-next"
+    running=0
+    if "$init" running >/dev/null 2>&1; then running=1; "$init" stop; fi
+    mv "$core.stage9-next" "$core"
+    mv "$init.stage9-next" "$init"
+    rm "$backup/core.next" "$backup/init.next"
+    (cd / && sha256sum "${core#/}" "${init#/}" > "$backup/active.sha256")
+    test "$running" -eq 0 || "$init" start
+    echo 'Stage 9 activated. Existing certificates, UCI settings and routing are retained.'
+    ;;
+rollback)
+    test "$(id -u)" -eq 0 || fail 'Run as root.'
+    verify_backup
+    test -f "$backup/active.sha256" || fail 'No recorded activation to roll back.'
+    (cd / && sha256sum -c "$backup/active.sha256") || fail 'Core/init changed after activation. Preserve your edits before rollback.'
+    node --check < "$backup/core.original"
+    sh -n "$backup/init.original"
+    test ! -e "$core.stage9-rollback" && test ! -e "$init.stage9-rollback" || fail 'An interrupted rollback exists; inspect staged files first.'
+    cp -p "$backup/core.original" "$core.stage9-rollback"
+    cp -p "$backup/init.original" "$init.stage9-rollback"
+    running=0
+    if "$init" running >/dev/null 2>&1; then running=1; "$init" stop; fi
+    mv "$core.stage9-rollback" "$core"
+    mv "$init.stage9-rollback" "$init"
+    rm "$backup/active.sha256"
+    test "$running" -eq 0 || "$init" start
+    echo 'Original core and init restored. Backup retained.'
+    ;;
+*) fail 'Usage: unm-stage9 [status|activate|rollback]' ;;
+esac

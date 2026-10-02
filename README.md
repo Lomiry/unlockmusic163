@@ -4,6 +4,8 @@
 
 ## 下载与部署
 
+ImmortalWrt 25.12.1 x86/64 用户可下载自动构建的路由器 `.apk`，安装和回退步骤见 [APK 安装说明](docs/router-apk.md)。这是路由器软件包。
+
 前往 [GitHub Releases](https://github.com/Lomiry/unlockmusic163/releases) 下载路由器更新包，解压后先阅读包内 README 和部署说明。路由器需已有 Node.js、UnblockNeteaseMusic 服务配置和 HTTPS 证书。
 
 [Stage 9 部署说明](docs/android-9.6.05-stage9.md) 包含版本校验、备份、启用、关闭和回滚步骤。自动部署脚本仅适用于说明中指定的 Stage 8 核心；已有原 Stage 9 可按 [性能优化说明](docs/performance-stage9.md) 升级或回退。

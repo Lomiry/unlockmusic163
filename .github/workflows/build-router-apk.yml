@@ -1,0 +1,96 @@
+name: Build ImmortalWrt router APK
+
+on:
+    push:
+        branches:
+            - debug/android-9.6.05-stage9
+        paths:
+            - 'precompiled/app.js*'
+            - 'openwrt/**'
+            - 'scripts/prepare-router-apk.cjs'
+            - 'scripts/test-router-apk.cjs'
+            - 'docs/router-apk.md'
+            - '.github/workflows/build-router-apk.yml'
+    workflow_dispatch:
+
+permissions:
+    contents: write
+
+concurrency:
+    group: router-apk-${{ github.ref }}
+    cancel-in-progress: false
+
+env:
+    SDK_FILE: immortalwrt-sdk-25.12.1-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+    SDK_URL: https://downloads.immortalwrt.org/releases/25.12.1/targets/x86/64/
+    SDK_SHA256: 02ad8cfc775001ccae8e9282d19696de54e3ab3963f005737ad61f8698263edd
+
+jobs:
+    build-apk:
+        runs-on: ubuntu-24.04
+        timeout-minutes: 30
+        steps:
+            - uses: actions/checkout@v7
+            - uses: actions/setup-node@v7
+              with:
+                  node-version: 20
+            - name: Install SDK prerequisites
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y build-essential gawk gettext libncurses-dev libssl-dev rsync unzip zstd
+            - name: Test activation and rollback in a sandbox
+              run: node scripts/test-router-apk.cjs
+            - name: Cache pinned SDK archive
+              uses: actions/cache@v4
+              with:
+                  path: .sdk-download
+                  key: immortalwrt-25.12.1-x86-64-${{ env.SDK_SHA256 }}
+            - name: Download and verify official SDK
+              run: |
+                  mkdir -p .sdk-download
+                  if [ ! -f ".sdk-download/$SDK_FILE" ]; then
+                    curl --fail --location --retry 3 --connect-timeout 30 "$SDK_URL$SDK_FILE" -o ".sdk-download/$SDK_FILE"
+                  fi
+                  printf '%s  %s\n' "$SDK_SHA256" ".sdk-download/$SDK_FILE" | sha256sum -c -
+                  mkdir sdk
+                  tar --zstd -xf ".sdk-download/$SDK_FILE" --strip-components=1 -C sdk
+            - name: Prepare core package
+              run: node scripts/prepare-router-apk.cjs sdk
+            - name: Build APK with ImmortalWrt 25.12.1 SDK
+              working-directory: sdk
+              run: |
+                  printf '\nCONFIG_ALL=n\nCONFIG_ALL_NONSHARED=n\nCONFIG_ALL_KMODS=n\nCONFIG_PACKAGE_unblockneteasemusic-stage9=m\n' >> .config
+                  make defconfig
+                  grep -q '^CONFIG_USE_APK=y$' .config
+                  make package/unblockneteasemusic-stage9/compile -j2 V=s UNM_PKG_RELEASE="$GITHUB_RUN_NUMBER"
+            - name: Verify APK metadata and payload
+              run: |
+                  mkdir -p dist/apk "$RUNNER_TEMP/apk-verify"
+                  mapfile -t packages < <(find sdk/bin -type f -name 'unblockneteasemusic-stage9-*.apk')
+                  [ "${#packages[@]}" -eq 1 ]
+                  package="${packages[0]}"
+                  sdk/staging_dir/host/bin/apk adbdump "$package" > dist/apk/APK-METADATA.txt
+                  grep -q 'x86_64' dist/apk/APK-METADATA.txt
+                  sdk/staging_dir/host/bin/apk extract --allow-untrusted --destination "$RUNNER_TEMP/apk-verify" "$package"
+                  cmp precompiled/app.js "$RUNNER_TEMP/apk-verify/usr/share/unblockneteasemusic-stage9/app.js"
+                  (cd "$RUNNER_TEMP/apk-verify/usr/share/unblockneteasemusic-stage9" && sha256sum -c SHA256SUMS)
+                  name="unblockneteasemusic-stage9-0.28.0-r${GITHUB_RUN_NUMBER}-immortalwrt-25.12.1-x86_64.apk"
+                  cp "$package" "dist/apk/$name"
+                  cp docs/router-apk.md dist/apk/INSTALL.md
+                  (cd dist/apk && sha256sum ./*.apk APK-METADATA.txt INSTALL.md > SHA256SUMS)
+                  sha256sum precompiled/app.js > dist/apk/CORE-SHA256SUMS
+            - name: Upload APK artifact
+              uses: actions/upload-artifact@v7
+              with:
+                  name: immortalwrt-25.12.1-x86_64-apk
+                  path: dist/apk/*
+                  if-no-files-found: error
+            - name: Publish APK Release
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  tag="router-apk-${GITHUB_RUN_NUMBER}"
+                  if ! gh release view "$tag" >/dev/null 2>&1; then
+                    gh release create "$tag" --target "$GITHUB_SHA" --title "ImmortalWrt 25.12.1 x86/64 APK · build ${GITHUB_RUN_NUMBER}" --notes-file docs/router-apk.md --prerelease
+                  fi
+                  gh release upload "$tag" dist/apk/* --clobber
