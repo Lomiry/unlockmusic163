@@ -269,3 +269,72 @@ describe('XEAPI hook isolation', () => {
 		expect(ctx.xeapi).toBeUndefined();
 	});
 });
+
+describe('router observation fast path', () => {
+	const { shouldObserveResponse } = require('./xeapi');
+	test('ordinary XEAPI requests do not attach capture listeners when diagnostics are off', () => {
+		const response = responseFor(encrypted());
+		const ctx = {
+			req: { headers: {} },
+			proxyRes: response,
+			xeapi: { apiPath: '/api/test' },
+		};
+		hook.request.after(ctx);
+		expect(ctx.proxyRes).toBe(response);
+		expect(response.listenerCount('data')).toBe(0);
+		expect(response.readableFlowing).toBe(null);
+		response.destroy();
+	});
+	test.each([
+		['UNM_ALBUM_PLAY_OBSERVER', '/api/song/enhance/player/url/v1'],
+		['UNM_PRIVILEGE_OBSERVER', '/api/album/privilege'],
+		['UNM_PRIVILEGE_VALUE_OBSERVER', '/api/album/privilege'],
+	])('keeps %s active only on its target response', (key, target) => {
+		expect(shouldObserveResponse(target, { [key]: 'true' })).toBe(true);
+		expect(shouldObserveResponse('/api/unrelated', { [key]: 'true' })).toBe(
+			false
+		);
+	});
+	test('explicit XEAPI diagnostics can still observe every path', () => {
+		expect(
+			shouldObserveResponse('/api/test', { UNM_XEAPI_OBSERVER: 'true' })
+		).toBe(true);
+		expect(shouldObserveResponse('/api/test', {})).toBe(false);
+	});
+	test('enabled observers allocate a small buffer for small responses', async () => {
+		const body = encrypted();
+		const allocate = jest.spyOn(Buffer, 'allocUnsafe');
+		try {
+			await observe(body);
+			expect(allocate.mock.calls.some(([size]) => size === 4096)).toBe(
+				true
+			);
+			expect(
+				allocate.mock.calls.some(([size]) => size === 1024 * 1024)
+			).toBe(false);
+		} finally {
+			allocate.mockRestore();
+		}
+	});
+});
+
+test.each([
+	'/api/album/v3/detail',
+	'/api/v1/artist/top/song',
+	'/api/artist/top/song',
+	'/api/search/complex/get',
+	'/api/v3/search/suggest',
+])('preserves privilege observer coverage for %s', (apiPath) => {
+	expect(
+		require('./xeapi').shouldObserveResponse(apiPath, {
+			UNM_PRIVILEGE_OBSERVER: 'true',
+		})
+	).toBe(true);
+});
+test('growing observation buffers preserve responses spanning multiple capacity boundaries', async () => {
+	const body = crypto.eapi.encrypt(
+		Buffer.from(JSON.stringify({ code: 200, data: 'x'.repeat(20000) }))
+	);
+	const logs = await observe(body);
+	expect(logs[1].message).toBe('NCM XEAPI decoded response');
+});

@@ -6,11 +6,11 @@
 
 前往 [GitHub Releases](https://github.com/Lomiry/unlockmusic163/releases) 下载路由器更新包，解压后先阅读包内 README 和部署说明。路由器需已有 Node.js、UnblockNeteaseMusic 服务配置和 HTTPS 证书。
 
-[Stage 9 部署说明](docs/android-9.6.05-stage9.md) 包含版本校验、备份、启用、关闭和回滚步骤。自动部署脚本仅适用于说明中指定的 Stage 8 核心；已正常运行 Stage 9 的设备无需重新安装。
+[Stage 9 部署说明](docs/android-9.6.05-stage9.md) 包含版本校验、备份、启用、关闭和回滚步骤。自动部署脚本仅适用于说明中指定的 Stage 8 核心；已有原 Stage 9 可按 [性能优化说明](docs/performance-stage9.md) 升级或回退。
 
 - 路由器核心：`precompiled/app.js`。
 - 服务：`/etc/init.d/unblockneteasemusic`。
-- 已验证核心 SHA256：`d8b0171e346f6655985669896197d5a65bc66afb7b783cc28af4b4c5370fdace`。
+- 当前优化构建 SHA256（本地验证）：`51a87abe4d6f53903c1b5372d24c6e1cb2d74b7186a1ab0e6b3af6301a893b17`。
 - Stage 6：`UNM_XEAPI_PRIVILEGE_PATCH=true`，负责灰歌可点击。
 - Stage 9：`UNM_XEAPI_PLAYER_URL_PATCH=true`，负责回填可播放音源。
 - Stage 8 observer：`UNM_ALBUM_PLAY_OBSERVER=false`。

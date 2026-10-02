@@ -8,7 +8,7 @@ const CacheStorageEvents = {
 };
 
 /**
- * @typedef {{data: any, expireAt: Date}} CacheData
+ * @typedef {{data: any, expireAt: number | Date}} CacheData
  */
 
 /**
@@ -26,6 +26,9 @@ class CacheStorage extends EventEmitter {
 	 */
 	cacheMap = new Map();
 
+	pendingMap = new Map();
+	nextCleanupAt = 0;
+
 	aliveDuration = 30 * 60 * 1000; // will expire after 30 minutes.
 
 	/**
@@ -41,9 +44,7 @@ class CacheStorage extends EventEmitter {
 
 		// Register the CLEANUP event. It will clean up
 		// the expired cache when emitting "CLEANUP" event.
-		this.on(CacheStorageEvents.CLEANUP, async () =>
-			this.removeExpiredCache()
-		);
+		this.on(CacheStorageEvents.CLEANUP, () => this.removeExpiredCache());
 	}
 
 	/**
@@ -77,8 +78,10 @@ class CacheStorage extends EventEmitter {
 			this.getLoggerContext(),
 			'Cleaning up the expired caches...'
 		);
+		const now = Date.now();
+		this.nextCleanupAt = now + 60 * 1000;
 		this.cacheMap.forEach((cachedData, key) => {
-			if (cachedData.expireAt <= Date.now()) this.cacheMap.delete(key);
+			if (cachedData.expireAt <= now) this.cacheMap.delete(key);
 		});
 	}
 
@@ -97,41 +100,48 @@ class CacheStorage extends EventEmitter {
 			return action();
 		}
 
-		// Push the CLEANUP task to the event loop - "polling",
-		// so that it won't block the cache() task.
-		this.emit(CacheStorageEvents.CLEANUP);
-
-		// Check if we have cached it before.
-		// If true, we return the cached value.
+		const now = Date.now();
+		// Sweep at most once per minute; each lookup still validates its own expiry.
+		if (now >= this.nextCleanupAt) {
+			this.nextCleanupAt = now + 60 * 1000;
+			this.emit(CacheStorageEvents.CLEANUP);
+		}
 		const cachedData = this.cacheMap.get(key);
-
-		// Object.toString() can't bring any useful information,
-		// we show "Something" instead.
-		const logKey = typeof key === 'object' ? 'Something' : key;
-
-		// Get the logger context with getLoggerContext
-		const logCtx = this.getLoggerContext({
-			logKey,
-		});
-
-		if (cachedData) {
-			logger.debug(logCtx, `${logKey} hit!`);
+		if (cachedData && cachedData.expireAt > now) {
+			if (logger.isLevelEnabled('debug')) {
+				const logKey = typeof key === 'object' ? 'Something' : key;
+				logger.debug(
+					this.getLoggerContext({ logKey }),
+					`${logKey} hit!`
+				);
+			}
 			return cachedData.data;
 		}
-
-		// Cache the response of action() and
-		// register into our cache map.
-		logger.debug(
-			logCtx,
-			`${logKey} did not hit. Storing the execution result...`
-		);
-
-		const sourceResponse = await action();
-		this.cacheMap.set(key, {
-			data: sourceResponse,
-			expireAt: new Date(expireAt || this.WillExpireAt),
-		});
-		return sourceResponse;
+		if (cachedData) this.cacheMap.delete(key);
+		// Concurrent misses for the same key share one provider request.
+		if (this.pendingMap.has(key)) return this.pendingMap.get(key);
+		if (logger.isLevelEnabled('debug')) {
+			const logKey = typeof key === 'object' ? 'Something' : key;
+			logger.debug(
+				this.getLoggerContext({ logKey }),
+				`${logKey} did not hit. Storing the execution result...`
+			);
+		}
+		const pending = Promise.resolve()
+			.then(action)
+			.then((data) => {
+				this.cacheMap.set(key, {
+					data,
+					expireAt: expireAt || this.WillExpireAt,
+				});
+				return data;
+			});
+		this.pendingMap.set(key, pending);
+		try {
+			return await pending;
+		} finally {
+			this.pendingMap.delete(key);
+		}
 	}
 }
 

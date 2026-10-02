@@ -14,6 +14,26 @@ const MAX_BYTES = 1024 * 1024;
 const MAX_CAPTURES = 8;
 let captures = 0;
 
+// Detailed capture is opt-in. Specific observers retain their existing switches.
+const shouldObserveResponse = (apiPath, env = process.env) => {
+	if (env.UNM_XEAPI_OBSERVER === 'true') return true;
+	if (apiPath === '/api/song/enhance/player/url/v1')
+		return env.UNM_ALBUM_PLAY_OBSERVER === 'true';
+	const privilegeValues = [
+		'/api/album/privilege',
+		'/api/v1/artist/top/song',
+		'/api/artist/top/song',
+	].includes(apiPath);
+	if (privilegeValues && env.UNM_PRIVILEGE_VALUE_OBSERVER === 'true')
+		return true;
+	return (
+		env.UNM_PRIVILEGE_OBSERVER === 'true' &&
+		(privilegeValues ||
+			apiPath === '/api/album/v3/detail' ||
+			/^\/api\/(?:v[1-3]\/)?search\/[a-zA-Z0-9_/-]+$/.test(apiPath))
+	);
+};
+
 // Decode a diagnostic copy only. Session headers/keys are never needed here.
 const decodeResponse = async (buffer, encoding) => {
 	const options = { maxOutputLength: MAX_BYTES };
@@ -59,7 +79,7 @@ const observeResponse = (response, apiPath, logger) => {
 	if (response.readableEnded || response.destroyed)
 		return skipped('stream_unavailable');
 	captures++;
-	let capture = Buffer.allocUnsafe(MAX_BYTES);
+	let capture = null;
 	let bytes = 0;
 	let oversized = false;
 	let finished = false;
@@ -70,6 +90,19 @@ const observeResponse = (response, apiPath, logger) => {
 			oversized = true;
 			capture = null;
 		} else {
+			if (!capture || bytes + chunk.length > capture.length) {
+				const capacity = Math.min(
+					MAX_BYTES,
+					Math.max(
+						4096,
+						bytes + chunk.length,
+						capture ? capture.length * 2 : 0
+					)
+				);
+				const next = Buffer.allocUnsafe(capacity);
+				if (capture) capture.copy(next, 0, 0, bytes);
+				capture = next;
+			}
 			chunk.copy(capture, bytes);
 			bytes += chunk.length;
 		}
@@ -137,4 +170,4 @@ const observeResponse = (response, apiPath, logger) => {
 	response.pause();
 };
 
-module.exports = { observeResponse, decodeResponse };
+module.exports = { observeResponse, decodeResponse, shouldObserveResponse };

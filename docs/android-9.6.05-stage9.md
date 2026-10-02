@@ -1,8 +1,10 @@
 # Stage 9：Android 网易云 9.6.05 XEAPI v1 灰歌音源替换
 
-日期：2026-10-01。已完成实现、相关测试、本地代理回归和构建。用户反馈 Android 网易云 9.6.05 实机中普通歌、原灰歌及额外灰歌均可正常播放；服务重启后 Stage 6、Stage 9 环境变量保持开启，Stage 8 observer 关闭。此实机结果来自用户反馈。
+原 Stage 9（2026-10-01）已由用户反馈 Android 网易云 9.6.05 实机普通歌及灰歌均可播放，服务重启后 Stage 6/9 开关保持开启、Stage 8 observer 关闭。该实机反馈对应原核心 SHA256：`d8b0171e346f6655985669896197d5a65bc66afb7b783cc28af4b4c5370fdace`。
 
-app.js SHA256：`d8b0171e346f6655985669896197d5a65bc66afb7b783cc28af4b4c5370fdace`
+2026-10-03 性能优化构建保留补丁规则，并通过本地测试与代理回归；优化构建尚未进行路由器实机复验。[优化与性能记录](performance-stage9.md) 包含对比结果及从原 Stage 9 升级、回退的步骤。
+
+app.js SHA256：`51a87abe4d6f53903c1b5372d24c6e1cb2d74b7186a1ab0e6b3af6301a893b17`
 
 ## 实现范围与源码
 
@@ -61,7 +63,7 @@ core=/usr/share/unblockneteasemusic/core/app.js
 init=/etc/init.d/unblockneteasemusic
 new=/tmp/app.js.stage9
 old=cf2962cefa4f487e69058ab40b7aaf12cfd06901cab54947ea28bbd461514f9f
-newsha=d8b0171e346f6655985669896197d5a65bc66afb7b783cc28af4b4c5370fdace
+newsha=51a87abe4d6f53903c1b5372d24c6e1cb2d74b7186a1ab0e6b3af6301a893b17
 printf '%s  %s\n' "$old" "$core" | sha256sum -c -
 printf '%s  %s\n' "$newsha" "$new" | sha256sum -c -
 node --check < "$new"
@@ -110,7 +112,7 @@ netstat -lntp 2>/dev/null | grep -E '5200|5201'
 set -eu
 init=/etc/init.d/unblockneteasemusic
 core=/usr/share/unblockneteasemusic/core/app.js
-printf '%s  %s\n' 'd8b0171e346f6655985669896197d5a65bc66afb7b783cc28af4b4c5370fdace' "$core" | sha256sum -c -
+printf '%s  %s\n' '51a87abe4d6f53903c1b5372d24c6e1cb2d74b7186a1ab0e6b3af6301a893b17' "$core" | sha256sum -c -
 grep -q 'UNM_XEAPI_PRIVILEGE_PATCH=true' "$init"
 test "$(grep -c 'UNM_XEAPI_PLAYER_URL_PATCH=false' "$init")" -eq 1
 test ! -e "$init.before-stage9-enable"
@@ -143,7 +145,7 @@ tr '\0' '\n' < /proc/$pid/environ | grep -E '^UNM_(XEAPI_PRIVILEGE_PATCH|XEAPI_P
 set -eu
 init=/etc/init.d/unblockneteasemusic
 core=/usr/share/unblockneteasemusic/core/app.js
-printf '%s  %s\n' 'd8b0171e346f6655985669896197d5a65bc66afb7b783cc28af4b4c5370fdace' "$core" | sha256sum -c -
+printf '%s  %s\n' '51a87abe4d6f53903c1b5372d24c6e1cb2d74b7186a1ab0e6b3af6301a893b17' "$core" | sha256sum -c -
 grep -q 'UNM_XEAPI_PRIVILEGE_PATCH=true' "$init"
 test "$(grep -c 'UNM_XEAPI_PLAYER_URL_PATCH=true' "$init")" -eq 1
 test ! -e "$init.before-stage9-disable"
@@ -168,7 +170,7 @@ mv "$init.next-stage9-disable" "$init"
 set -eu
 core=/usr/share/unblockneteasemusic/core/app.js
 init=/etc/init.d/unblockneteasemusic
-printf '%s  %s\n' 'd8b0171e346f6655985669896197d5a65bc66afb7b783cc28af4b4c5370fdace' "$core" | sha256sum -c -
+printf '%s  %s\n' '51a87abe4d6f53903c1b5372d24c6e1cb2d74b7186a1ab0e6b3af6301a893b17' "$core" | sha256sum -c -
 printf '%s  %s\n' 'cf2962cefa4f487e69058ab40b7aaf12cfd06901cab54947ea28bbd461514f9f' "$core.before-stage9" | sha256sum -c -
 test -f "$init.before-stage9"
 sh -n "$init.before-stage9"

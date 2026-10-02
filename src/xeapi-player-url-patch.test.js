@@ -357,3 +357,20 @@ test('log safe allowlist and write/defer/diagnostic failure isolated', async () 
 		},
 	});
 });
+
+test('ordinary songs and failed matches retain the original JSON without cloning data', async () => {
+	const json = { code: 200, data: Array.from({ length: 512 }, normal) };
+	const match = jest.fn();
+	expect((await patchJson(json, { matcher: match })).json).toBe(json);
+	expect(match).not.toHaveBeenCalled();
+	const failure = { code: 200, data: [gray()] };
+	expect(
+		(
+			await patchJson(failure, {
+				matcher: async () => {
+					throw Error('offline');
+				},
+			})
+		).json
+	).toBe(failure);
+});

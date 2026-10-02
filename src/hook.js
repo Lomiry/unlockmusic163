@@ -6,7 +6,12 @@ const querystring = require('querystring');
 const { isHost, cookieToMap, mapToCookie } = require('./utilities');
 const { getManagedCacheStorage } = require('./cache');
 const { logScope } = require('./logger');
-const { observeResponse: observeXeapiResponse } = require('./xeapi');
+const { observeResponse, shouldObserveResponse } = require('./xeapi');
+const observeXeapiResponse = (response, apiPath, logger) => {
+	if (shouldObserveResponse(apiPath))
+		observeResponse(response, apiPath, logger);
+};
+const detailedDiagnostics = process.env.UNM_XEAPI_OBSERVER === 'true';
 const { scheduleBatchObservation } = require('./batch-observer');
 const { preparePrivilegePatch } = require('./xeapi-privilege-patch');
 const { preparePlayerUrlPatch } = require('./xeapi-player-url-patch');
@@ -148,7 +153,7 @@ hook.request.before = (ctx) => {
 	const diagnosticHost = [url.hostname, req.headers.host].find((host) =>
 		hook.target.host.has(host)
 	);
-	if (diagnosticHost) {
+	if (diagnosticHost && detailedDiagnostics) {
 		// Capture flags before the existing x-aeapi rewrite. No request/body dump.
 		const contentType = req.headers['content-type'];
 		logger.info(
@@ -295,7 +300,7 @@ hook.request.before = (ctx) => {
 							// Diagnostic failure must never reach the request catch.
 						}
 					}
-					if (netease.crypto === 'eapi') {
+					if (detailedDiagnostics && netease.crypto === 'eapi') {
 						logger.info(
 							{
 								crypto: netease.crypto,
@@ -380,7 +385,8 @@ hook.request.before = (ctx) => {
 hook.request.after = (ctx) => {
 	const { req, proxyRes, netease, package: pkg } = ctx;
 	if (ctx.xeapi) {
-		const prepared = preparePrivilegePatch(ctx) || preparePlayerUrlPatch(ctx);
+		const prepared =
+			preparePrivilegePatch(ctx) || preparePlayerUrlPatch(ctx);
 		if (prepared)
 			return prepared.then(() =>
 				observeXeapiResponse(ctx.proxyRes, ctx.xeapi.apiPath, logger)

@@ -54,60 +54,65 @@ const patchJson = async (
 	)
 		return { ...stats, json };
 	stats.examinedCount = json.data.length;
-	const tasks = new Map();
-	const data = await Promise.all(
-		json.data.map(async (item) => {
+	let tasks;
+	let data;
+	const pending = [];
+	const patchItem = async (item, index) => {
+		try {
+			const key = String(item.id);
+			if (!tasks) tasks = new Map();
+			if (!tasks.has(key))
+				tasks.set(
+					key,
+					Promise.resolve().then(() => matcher(item.id))
+				);
+			const song = await tasks.get(key);
 			if (
-				!item ||
-				typeof item !== 'object' ||
-				Array.isArray(item) ||
-				item.code !== 404 ||
-				item.url !== null ||
-				item.br !== 0
+				!song ||
+				typeof song.url !== 'string' ||
+				!/^https?:\/\//i.test(song.url)
 			)
-				return item;
-			stats.matchedFailureCount++;
-			if (!validId(item.id)) {
-				stats.skippedNoIdCount++;
-				return item;
-			}
-			try {
-				const key = String(item.id);
-				if (!tasks.has(key))
-					tasks.set(
-						key,
-						Promise.resolve().then(() => matcher(item.id))
-					);
-				const song = await tasks.get(key);
-				if (
-					!song ||
-					typeof song.url !== 'string' ||
-					!/^https?:\/\//i.test(song.url)
-				)
-					throw Error('audio');
-				// Same non-PC endpoint/package, type, MD5 and bitrate semantics as tryMatch.
-				const type = song.br === 999000 ? 'flac' : 'mp3';
-				const copy = {
-					...item,
-					url: endpoint
-						? `${endpoint}/package/${crypto.base64.encode(song.url)}/${item.id}.${type}`
-						: song.url,
-					type,
-					md5: song.md5 || crypto.md5.digest(song.url),
-					br: song.br || 128000,
-					size: song.size,
-					code: 200,
-					freeTrialInfo: null,
-				};
-				stats.patchedCount++;
-				return copy;
-			} catch {
-				stats.matcherFailedCount++;
-				return item;
-			}
-		})
-	);
-	return { ...stats, json: { ...json, data } };
+				throw Error('audio');
+			const type = song.br === 999000 ? 'flac' : 'mp3';
+			const copy = {
+				...item,
+				url: endpoint
+					? `${endpoint}/package/${crypto.base64.encode(song.url)}/${item.id}.${type}`
+					: song.url,
+				type,
+				md5: song.md5 || crypto.md5.digest(song.url),
+				br: song.br || 128000,
+				size: song.size,
+				code: 200,
+				freeTrialInfo: null,
+			};
+			if (!data) data = json.data.slice();
+			data[index] = copy;
+			stats.patchedCount++;
+		} catch {
+			stats.matcherFailedCount++;
+		}
+	};
+	for (let index = 0; index < json.data.length; index++) {
+		const item = json.data[index];
+		if (
+			!item ||
+			typeof item !== 'object' ||
+			Array.isArray(item) ||
+			item.code !== 404 ||
+			item.url !== null ||
+			item.br !== 0
+		)
+			continue;
+		stats.matchedFailureCount++;
+		if (!validId(item.id)) {
+			stats.skippedNoIdCount++;
+			continue;
+		}
+		pending.push(patchItem(item, index));
+	}
+	if (pending.length) await Promise.all(pending);
+	return { ...stats, json: data ? { ...json, data } : json };
 };
 const transformBody = async (
 	body,
