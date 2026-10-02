@@ -14,7 +14,7 @@ define Package/unblockneteasemusic-stage9
   CATEGORY:=Network
   TITLE:=Stage 9 optimized UNM core for ImmortalWrt
   URL:=https://github.com/Lomiry/unlockmusic163
-  EXTRA_DEPENDS:=node (>= 12), luci-app-unblockneteasemusic (>= 0)
+  EXTRA_DEPENDS:=node (>=12), luci-app-unblockneteasemusic (>=0)
 endef
 
 define Package/unblockneteasemusic-stage9/description
