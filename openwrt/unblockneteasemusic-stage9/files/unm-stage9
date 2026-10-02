@@ -37,7 +37,8 @@ activate)
         cp -p "$core" "$backup/core.original"
         cp -p "$init" "$backup/init.original"
         (cd "$backup" && sha256sum core.original init.original > original.sha256)
-        chmod 600 "$backup"/*
+        chmod 700 "$backup"
+        chmod 600 "$backup/original.sha256"
     fi
     test ! -e "$backup/core.next" && test ! -e "$backup/init.next" || fail 'Staged files already exist; inspect the previous interrupted activation.'
     cp "$payload/app.js" "$backup/core.next"
